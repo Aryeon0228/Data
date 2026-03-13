@@ -1,16 +1,18 @@
 /*
 	Remove Collinear Vertices
-	Removes unnecessary vertices that lie on a straight edge
+	선택한 오브젝트의 잉여 버텍스를 제거하는 스크립트
 */
 
 try(destroyDialog RemoveCollinearVerts) catch()
 
-rollout RemoveCollinearVerts "Remove Collinear Vertices" width:300 height:150
+rollout RemoveCollinearVerts "Remove Collinear Vertices" width:300 height:200
 (
 	spinner spnThresh "Threshold:" range:[0.0001, 10.0, 0.001] type:#float scale:0.001 pos:[10,15] width:280
 	label lblInfo "" pos:[10,50]
-	button btnRun "Remove" pos:[10,80] width:280 height:35 enabled:false
-	button btnSelect "Select Verts (Preview)" pos:[10,120] width:280 height:22 enabled:false
+	label lblDetail "" pos:[10,68]
+	button btnRun "Remove" pos:[10,95] width:280 height:40 enabled:false
+	button btnSelect "Select Verts (Preview)" pos:[10,140] width:280 height:22 enabled:false
+	timer tmrSelection interval:500 active:true
 
 	fn getCollinearVerts obj thresh =
 	(
@@ -47,30 +49,37 @@ rollout RemoveCollinearVerts "Remove Collinear Vertices" width:300 height:150
 		if selection.count == 0 then
 		(
 			lblInfo.text = "No object selected."
+			lblDetail.text = ""
 			btnRun.enabled = false
 			btnSelect.enabled = false
 		)
 		else if selection.count > 1 then
 		(
-			lblInfo.text = (selection.count as string + " objects selected.")
-			btnRun.enabled = true
+			local polyCount = (for obj in selection where isKindOf obj Editable_Poly collect obj).count
+			lblInfo.text = (selection.count as string + " objects selected (" + polyCount as string + " Editable Poly)")
+			lblDetail.text = ""
+			btnRun.enabled = (polyCount > 0)
 			btnSelect.enabled = false
 		)
 		else if not isKindOf $ Editable_Poly then
 		(
-			lblInfo.text = "Selected object is not an Editable Poly."
+			lblInfo.text = ("'" + $.name + "' is not an Editable Poly.")
+			lblDetail.text = "Convert to Editable Poly first."
 			btnRun.enabled = false
 			btnSelect.enabled = false
 		)
 		else
 		(
-			lblInfo.text = ("Target: " + $.name + " (" + (polyop.getNumVerts $) as string + " verts)")
+			lblInfo.text = ("Target: " + $.name)
+			lblDetail.text = ("Verts: " + (polyop.getNumVerts $) as string + "  |  Faces: " + (polyop.getNumFaces $) as string)
 			btnRun.enabled = true
 			btnSelect.enabled = true
 		)
 	)
 
 	on RemoveCollinearVerts open do updateInfo()
+
+	on tmrSelection tick do updateInfo()
 
 	on btnSelect pressed do
 	(
@@ -80,6 +89,7 @@ rollout RemoveCollinearVerts "Remove Collinear Vertices" width:300 height:150
 			polyop.setVertSelection $ verts
 			subObjectLevel = 1
 			lblInfo.text = (verts.numberSet as string + " collinear verts found.")
+			lblDetail.text = "Preview mode - verts selected."
 		)
 	)
 
@@ -109,9 +119,24 @@ rollout RemoveCollinearVerts "Remove Collinear Vertices" width:300 height:150
 			)
 		)
 
-		lblInfo.text = ("Removed " + totalRemoved as string + " verts from " + objs.count as string + " object(s).")
-		if objs.count == 1 and isKindOf $ Editable_Poly then
-			lblInfo.text += (" (" + (polyop.getNumVerts $) as string + " remaining)")
+		-- 완료 사운드
+		windows.processPostedMessages()
+		sysInfo.beep 1
+
+		-- 결과 메시지
+		local msg = ""
+		if totalRemoved > 0 then
+		(
+			msg = totalRemoved as string + " vertices removed.\n"
+			msg += objs.count as string + " object(s) processed."
+			if objs.count == 1 and isKindOf $ Editable_Poly then
+				msg += ("\nRemaining verts: " + (polyop.getNumVerts $) as string)
+		)
+		else
+			msg = "No collinear vertices found.\n(Threshold: " + thresh as string + ")"
+
+		messageBox msg title:"Remove Collinear Vertices"
+		updateInfo()
 	)
 )
 
